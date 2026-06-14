@@ -20,9 +20,13 @@ public abstract class DataSourceAbsNode<T> extends AbstractNode<T> {
     }
 
     /**
+     * 开始运行生产者
+     */
+    public abstract void startProducer() throws Exception;
+    /**
      * 创建消费者
      */
-    public void createPublisher(Consumer<Flux<T>> publishOn){
+    public void createConsumer(Consumer<Flux<T>> publishOn){
         Flux<T> flux = this.dequeueFlux().publishOn(workSpaceEnv.getConsumerScheduler());
         publishOn.andThen(afterStreamCreated->{
             // 开启执行流水线
