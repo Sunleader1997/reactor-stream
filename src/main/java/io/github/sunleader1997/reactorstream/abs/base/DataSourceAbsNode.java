@@ -7,7 +7,7 @@ import reactor.core.publisher.Flux;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Consumer;
+import java.util.function.Function;
 
 public abstract class DataSourceAbsNode<T> extends AbstractNode<T> {
 
@@ -26,14 +26,13 @@ public abstract class DataSourceAbsNode<T> extends AbstractNode<T> {
     /**
      * 创建消费者
      */
-    public void createConsumer(Consumer<Flux<T>> publishOn){
+    public void createConsumer(Function<Flux<T>,Flux<?>> publishOn){
         Flux<T> flux = this.dequeueFlux().publishOn(workSpaceEnv.getConsumerScheduler());
-        publishOn.andThen(afterStreamCreated->{
-            // 开启执行流水线
-            Disposable disposable = afterStreamCreated.subscribe();
-            // 流水线加入
-            publishers.add(disposable);
-        }).accept(flux);
+        Flux<?> afterStreamCreated = publishOn.apply(flux);
+        // 开启执行流水线
+        Disposable disposable = afterStreamCreated.subscribe();
+        // 流水线加入
+        publishers.add(disposable);
     }
 
     public abstract Flux<T> dequeueFlux();

@@ -2,6 +2,8 @@ package io.github.sunleader1997.reactorstream.abs;
 
 import io.github.sunleader1997.reactorstream.abs.base.DataSourceAbsNode;
 import org.reactivestreams.Publisher;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -16,6 +18,8 @@ import java.util.List;
  */
 public abstract class DataSourceByPull<T> extends DataSourceAbsNode<T> {
 
+    private static final Logger log = LoggerFactory.getLogger(DataSourceByPull.class);
+
     /**
      * 拉取到的数据流
      */
@@ -23,10 +27,14 @@ public abstract class DataSourceByPull<T> extends DataSourceAbsNode<T> {
 
     protected DataSourceByPull(WorkSpaceEnv workSpaceEnv) {
         super(workSpaceEnv);
+        Duration waitDuration = workSpaceEnv.getWaitDuration();
+        log.info("DataSourceByPull initialized, dequeueScheduler={}, waitDuration={}",
+                workSpaceEnv.getDequeueScheduler().getClass().getSimpleName(), waitDuration);
         this.dequeueFlux = Flux
                 .defer(this::pull)
                 .repeat()
-                .subscribeOn(workSpaceEnv.getDequeueScheduler());
+                .subscribeOn(workSpaceEnv.getDequeueScheduler())
+                .share();
     }
 
     /**
@@ -36,8 +44,11 @@ public abstract class DataSourceByPull<T> extends DataSourceAbsNode<T> {
     public Publisher<T> pull() {
         List<T> dataList = this.fetchData();
         if (dataList == null || dataList.isEmpty()) {
-            return Mono.delay(workSpaceEnv.getWaitDuration()).then(Mono.empty());
+            Duration waitDuration = workSpaceEnv.getWaitDuration();
+            log.info("fetchData returned empty, wait {} before next pull", waitDuration);
+            return Mono.delay(waitDuration).then(Mono.empty());
         }
+        log.info("fetchData returned {} items", dataList.size());
         return Flux.fromIterable(dataList);
     }
 
