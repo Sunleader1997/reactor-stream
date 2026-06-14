@@ -1,42 +1,36 @@
 package io.github.sunleader1997.reactorstream.abs.base;
 
 
-import io.github.sunleader1997.reactorstream.abs.DataSourceByPull;
-import io.github.sunleader1997.reactorstream.abs.MapPipeline;
+import io.github.sunleader1997.reactorstream.abs.WorkSpaceEnv;
+import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
-import reactor.core.scheduler.Schedulers;
 
-/**
- * 数据源
- * @param <T>
- */
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Consumer;
+
 public abstract class DataSourceAbsNode<T> extends AbstractNode<T> {
 
-    protected Flux<T> dataFlux;
+    protected WorkSpaceEnv workSpaceEnv;
+    protected final List<Disposable> publishers;
 
-    /**
-     * 初始化
-     */
-    public abstract void init() throws Exception;
-
-    /**
-     * 手动提交数据给当前节点
-     * @param item 单个数据
-     */
-    public abstract void emit(T item);
-
-    /**
-     * 向尾部增加订阅
-     * @param pipeline 订阅
-     */
-    public DataSourceAbsNode<T> map(MapPipeline<T,?> pipeline) {
-        this.dataFlux.map(pipeline);
-        return this;
+    public DataSourceAbsNode(WorkSpaceEnv workSpaceEnv) {
+        this.workSpaceEnv = workSpaceEnv;
+        this.publishers = new ArrayList<>();
     }
 
-    public void start(){
-        this.dataFlux
-                .subscribeOn(Schedulers.newSingle("dequeue"))
-                .subscribe();;
+    /**
+     * 创建消费者
+     */
+    public void createPublisher(Consumer<Flux<T>> publishOn){
+        Flux<T> flux = this.dequeueFlux().publishOn(workSpaceEnv.getConsumerScheduler());
+        publishOn.andThen(afterStreamCreated->{
+            // 开启执行流水线
+            Disposable disposable = afterStreamCreated.subscribe();
+            // 流水线加入
+            publishers.add(disposable);
+        }).accept(flux);
     }
+
+    public abstract Flux<T> dequeueFlux();
 }
