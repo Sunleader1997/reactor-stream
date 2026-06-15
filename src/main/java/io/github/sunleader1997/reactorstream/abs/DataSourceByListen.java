@@ -15,6 +15,14 @@ public abstract class DataSourceByListen<T> extends DataSourceAbsNode<T> {
 
     private final Sinks.Many<T> dataSink;
 
+    public DataSourceByListen(){
+        this(new WorkSpaceEnv());
+    }
+
+    public DataSourceByListen(String name){
+        this(new WorkSpaceEnv(name));
+    }
+
     public DataSourceByListen(WorkSpaceEnv workSpaceEnv) {
         super(workSpaceEnv);
         this.dataSink = Sinks.many().multicast().onBackpressureBuffer();

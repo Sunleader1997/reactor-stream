@@ -20,6 +20,13 @@ public abstract class DataSourceByPull<T> extends DataSourceAbsNode<T> {
 
     private static final Logger log = LoggerFactory.getLogger(DataSourceByPull.class);
 
+    public DataSourceByPull(){
+        this(new WorkSpaceEnv());
+    }
+
+    public DataSourceByPull(String name){
+        this(new WorkSpaceEnv(name));
+    }
     /**
      * 拉取到的数据流
      */
@@ -46,7 +53,8 @@ public abstract class DataSourceByPull<T> extends DataSourceAbsNode<T> {
         if (dataList == null || dataList.isEmpty()) {
             Duration waitDuration = workSpaceEnv.getWaitDuration();
             log.info("fetchData returned empty, wait {} before next pull", waitDuration);
-            return Mono.delay(waitDuration).then(Mono.empty());
+            // Mono.delay(duration) 不指定 Scheduler 时默认用 Schedulers.parallel()，延时完成后 .repeat() 的下一个元素就在 parallel 线程上发出了
+            return Mono.delay(waitDuration, workSpaceEnv.getDequeueScheduler()).then(Mono.empty());
         }
         log.info("fetchData returned {} items", dataList.size());
         return Flux.fromIterable(dataList);
