@@ -68,10 +68,12 @@ public abstract class DataSourceAbsNode<T> extends AbstractNode<T> {
      * 执行多次创建多个消费者
      * 数据广播 到所有消费者
      */
-    public synchronized void createConsumer(Function<T, ?> tFunction) {
+    public synchronized <R> void createConsumer(Function<Mono<T>, Mono<R>> tFunction) {
         if (destroyed) {
             throw new IllegalStateException("DataSource has been destroyed, cannot create new consumer");
         }
+        // 初始化客户端/服务端
+        this.startProducerOnce();
         // 创建订阅着
         Disposable disposable = this.dequeueFlux()
                 // 不定义背压会缓存 N 条数据后阻塞线程
@@ -81,21 +83,21 @@ public abstract class DataSourceAbsNode<T> extends AbstractNode<T> {
         publishers.add(disposable);
     }
 
-    public <R> Mono<R> processors(T dataItem, Function<T, R> tFunction) {
+    protected  <R> Mono<R> processors(T dataItem, Function<Mono<T>, Mono<R>> tFunction) {
         return Mono.just(dataItem)
-                .map(tFunction)
+                .as(tFunction)
                 .doOnSuccess(this::doOnSuccess)
                 .onErrorContinue(this::onErrorContinue)
                 .subscribeOn(workSpaceEnv.getConsumerScheduler());
     }
 
-    public abstract Flux<T> dequeueFlux();
+    protected abstract Flux<T> dequeueFlux();
 
-    public <R> void doOnSuccess(R item) {
+    protected <R> void doOnSuccess(R item) {
         log.debug("doOnSuccess: {}", item);
     }
 
-    public <R> void onErrorContinue(Throwable throwable, R item) {
+    protected <R> void onErrorContinue(Throwable throwable, R item) {
         log.error("onErrorContinue: {}", item, throwable);
     }
 

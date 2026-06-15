@@ -60,7 +60,7 @@ public abstract class DataSourceByPull<T> extends DataSourceAbsNode<T> {
         return Flux.fromIterable(dataList);
     }
 
-    public abstract List<T> fetchData();
+    protected abstract List<T> fetchData();
 
     @Override
     public Flux<T> dequeueFlux() {
