@@ -36,6 +36,9 @@ public class ListenerTest {
                 };
             }
         };
+        listen.createConsumer(stringMono -> {
+            return stringMono.doOnNext(System.out::println);
+        });
 
         Thread.sleep(5000);
         listen.close();
