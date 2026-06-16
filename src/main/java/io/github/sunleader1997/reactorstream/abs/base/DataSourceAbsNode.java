@@ -25,13 +25,18 @@ public abstract class DataSourceAbsNode<T> extends AbstractNode<T> {
     public DataSourceAbsNode(WorkSpaceEnv workSpaceEnv) {
         this.workSpaceEnv = workSpaceEnv;
         this.publishers = new ArrayList<>();
+        this.createConsumer(this.pipelines());
     }
 
     /**
      * 生产者定义
+     * createConsumer 时自动执行
+     * 可在内部创建客户端/服务端
      * 返回 Destroyable 用于自动销毁
      */
-    protected abstract Destroyable startProducer();
+    protected Destroyable startProducer() {
+        return null;
+    }
 
     /**
      * 开始执行创建生产者
@@ -43,25 +48,12 @@ public abstract class DataSourceAbsNode<T> extends AbstractNode<T> {
         }
     }
 
-//    /**
-//     * 创建消费者
-//     * 执行多次创建多个消费者
-//     * 数据广播 到所有消费者
-//     */
-//    public synchronized void createConsumer(Function<Flux<T>, Flux<?>> publishOn) {
-//        if (destroyed) {
-//            throw new IllegalStateException("DataSource has been destroyed, cannot create new consumer");
-//        }
-//        // 初始化生产
-//        this.startProducerOnce();
-//        // 创建订阅着
-//        Flux<T> flux = this.dequeueFlux().publishOn(workSpaceEnv.getConsumerScheduler());
-//        Flux<?> afterStreamCreated = publishOn.apply(flux);
-//        // 开启执行流水线
-//        Disposable disposable = afterStreamCreated.subscribe();
-//        // 流水线加入
-//        publishers.add(disposable);
-//    }
+    /**
+     * 实现，以在内部完成流程创建
+     */
+    protected <R> Function<Mono<T>, Mono<R>> pipelines() {
+        return null;
+    }
 
     /**
      * 创建消费者
@@ -69,6 +61,9 @@ public abstract class DataSourceAbsNode<T> extends AbstractNode<T> {
      * 数据广播 到所有消费者
      */
     public synchronized <R> void createConsumer(Function<Mono<T>, Mono<R>> tFunction) {
+        if (tFunction == null) {
+            return;
+        }
         if (destroyed) {
             throw new IllegalStateException("DataSource has been destroyed, cannot create new consumer");
         }
@@ -83,7 +78,7 @@ public abstract class DataSourceAbsNode<T> extends AbstractNode<T> {
         publishers.add(disposable);
     }
 
-    protected  <R> Mono<R> processors(T dataItem, Function<Mono<T>, Mono<R>> tFunction) {
+    protected <R> Mono<R> processors(T dataItem, Function<Mono<T>, Mono<R>> tFunction) {
         return Mono.just(dataItem)
                 .as(tFunction)
                 .doOnSuccess(this::doOnSuccess)
