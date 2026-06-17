@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Sinks;
 
 import javax.security.auth.Destroyable;
 import java.util.ArrayList;
@@ -21,10 +22,16 @@ public abstract class DataSourceAbsNode<T> extends AbstractNode<T> {
     protected Destroyable producerDisposable;
     protected volatile boolean producerStarted = false;
     protected volatile boolean destroyed = false;
+    protected final Sinks.Many<T> dataSink;
 
+    public DataSourceAbsNode() {
+        this(new WorkSpaceEnv());
+    }
+    
     public DataSourceAbsNode(WorkSpaceEnv workSpaceEnv) {
         this.workSpaceEnv = workSpaceEnv;
         this.publishers = new ArrayList<>();
+        this.dataSink = Sinks.many().multicast().onBackpressureBuffer();
         this.createConsumer(this.pipelines());
     }
 
@@ -51,7 +58,7 @@ public abstract class DataSourceAbsNode<T> extends AbstractNode<T> {
     /**
      * 实现，以在内部完成流程创建
      */
-    protected <R> Function<Mono<T>, Mono<R>> pipelines() {
+    protected Function<Mono<T>, Mono<?>> pipelines() {
         return null;
     }
 
@@ -60,7 +67,7 @@ public abstract class DataSourceAbsNode<T> extends AbstractNode<T> {
      * 执行多次创建多个消费者
      * 数据广播 到所有消费者
      */
-    public synchronized <R> void createConsumer(Function<Mono<T>, Mono<R>> tFunction) {
+    public synchronized void createConsumer(Function<Mono<T>, Mono<?>> tFunction) {
         if (tFunction == null) {
             return;
         }
@@ -78,15 +85,23 @@ public abstract class DataSourceAbsNode<T> extends AbstractNode<T> {
         publishers.add(disposable);
     }
 
-    protected <R> Mono<R> processors(T dataItem, Function<Mono<T>, Mono<R>> tFunction) {
+    protected Mono<?> processors(T dataItem, Function<Mono<T>, Mono<?>> tFunction) {
         return Mono.just(dataItem)
                 .as(tFunction)
                 .doOnSuccess(this::doOnSuccess)
                 .onErrorContinue(this::onErrorContinue)
                 .subscribeOn(workSpaceEnv.getConsumerScheduler());
     }
+    /**
+     * 返回发送结果，调用方自己决定重试/丢弃/记录
+     */
+    public Sinks.EmitResult tryEmit(T item) {
+        return dataSink.tryEmitNext(item);
+    }
 
-    protected abstract Flux<T> dequeueFlux();
+    public Flux<T> dequeueFlux() {
+        return dataSink.asFlux();
+    }
 
     protected <R> void doOnSuccess(R item) {
         log.debug("doOnSuccess: {}", item);
