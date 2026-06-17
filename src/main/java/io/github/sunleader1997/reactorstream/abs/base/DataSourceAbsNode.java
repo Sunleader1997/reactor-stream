@@ -2,6 +2,7 @@ package io.github.sunleader1997.reactorstream.abs.base;
 
 
 import io.github.sunleader1997.reactorstream.abs.WorkSpaceEnv;
+import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.Disposable;
@@ -58,7 +59,7 @@ public abstract class DataSourceAbsNode<T> extends AbstractNode<T> {
     /**
      * 实现，以在内部完成流程创建
      */
-    protected Function<Mono<T>, Mono<?>> pipelines() {
+    protected Function<Mono<T>, Publisher<?>> pipelines() {
         return null;
     }
 
@@ -67,30 +68,26 @@ public abstract class DataSourceAbsNode<T> extends AbstractNode<T> {
      * 执行多次创建多个消费者
      * 数据广播 到所有消费者
      */
-    public synchronized void createConsumer(Function<Mono<T>, Mono<?>> tFunction) {
+    public synchronized void createConsumer(Function<Mono<T>, Publisher<?>> tFunction) {
         if (tFunction == null) {
             return;
         }
         if (destroyed) {
             throw new IllegalStateException("DataSource has been destroyed, cannot create new consumer");
         }
-        // 初始化客户端/服务端
-        this.startProducerOnce();
         // 创建订阅着
         Disposable disposable = this.dequeueFlux()
+                .publishOn(workSpaceEnv.getConsumerScheduler())
                 // 不定义背压会缓存 N 条数据后阻塞线程
-                .flatMap(dataItem -> processors(dataItem, tFunction).subscribeOn(workSpaceEnv.getConsumerScheduler()), 10)
+                .flatMap(dataItem -> processors(dataItem, tFunction))
                 .subscribe();
         // 流水线加入
         publishers.add(disposable);
     }
 
-    protected Mono<?> processors(T dataItem, Function<Mono<T>, Mono<?>> tFunction) {
+    protected Publisher<?> processors(T dataItem, Function<Mono<T>, Publisher<?>> tFunction) {
         return Mono.just(dataItem)
-                .as(tFunction)
-                .doOnSuccess(this::doOnSuccess)
-                .onErrorContinue(this::onErrorContinue)
-                .subscribeOn(workSpaceEnv.getConsumerScheduler());
+                .as(tFunction);
     }
     /**
      * 返回发送结果，调用方自己决定重试/丢弃/记录
