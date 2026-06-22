@@ -53,7 +53,7 @@ public class ListenerTest {
 
         AbsPipeline<String,String> mapPipeline = new AbsPipeline<String, String>() {
             @Override
-            protected Function<Mono<String>, Publisher<String>> pipelines() {
+            protected Function<Mono<String>, Flux<String>> pipelines() {
                 return mino-> mino
 //                        .flatMapMany(item-> Flux.fromIterable(List.of("1>>>"+item,"2>>>"+item,"3>>>"+item)))
                         .flatMapMany(item-> Flux.fromIterable(List.of(">>>"+item)))
@@ -61,15 +61,16 @@ public class ListenerTest {
             }
 
             @Override
-            public void close() throws Exception {
+            public void close() {
 
             }
         };
         AbsPipeline<String,String> logPipeline = new AbsPipeline<String, String>() {
             @Override
-            protected Function<Mono<String>, Publisher<String>> pipelines() {
+            protected Function<Mono<String>, Flux<String>> pipelines() {
                 return mino-> mino
-                        .doOnNext(item-> log.info("logPipeline1 => {}",item));
+                        .doOnNext(item-> log.info("logPipeline1 => {}",item))
+                        .flux();
             }
 
             @Override
@@ -79,9 +80,10 @@ public class ListenerTest {
         };
         AbsPipeline<String,String> logPipeline2 = new AbsPipeline<String, String>() {
             @Override
-            protected Function<Mono<String>, Publisher<String>> pipelines() {
+            protected Function<Mono<String>, Flux<String>> pipelines() {
                 return mino-> mino
-                        .doOnNext(item-> log.info("logPipeline2 => {}",item));
+                        .doOnNext(item-> log.info("logPipeline2 => {}",item))
+                        .flux();
             }
 
             @Override

@@ -2,9 +2,9 @@ package io.github.sunleader1997.reactorstream.abs.base;
 
 
 import io.github.sunleader1997.reactorstream.abs.WorkSpaceEnv;
-import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 
@@ -14,7 +14,6 @@ import java.util.function.Function;
 public abstract class AbsDataSourceNode<T> extends AbsPipeline<T,T> {
 
     private static final Logger log = LoggerFactory.getLogger(AbsDataSourceNode.class);
-    protected WorkSpaceEnv workSpaceEnv;
     protected Destroyable producerDisposable;
     protected volatile boolean producerStarted = false;
     protected volatile boolean destroyed = false;
@@ -24,12 +23,12 @@ public abstract class AbsDataSourceNode<T> extends AbsPipeline<T,T> {
     }
 
     public AbsDataSourceNode(WorkSpaceEnv workSpaceEnv) {
-        this.workSpaceEnv = workSpaceEnv;
+        this.setWorkSpaceEnv(workSpaceEnv);
     }
 
     @Override
-    protected Function<Mono<T>, Publisher<T>> pipelines() {
-        return tMono -> tMono;
+    protected Function<Mono<T>, Flux<T>> pipelines() {
+        return Mono::flux;
     }
     /**
      * 生产者定义
@@ -77,5 +76,6 @@ public abstract class AbsDataSourceNode<T> extends AbsPipeline<T,T> {
             log.info("销毁线程池");
             workSpaceEnv.close();
         }
+        super.close();
     }
 }
