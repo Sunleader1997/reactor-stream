@@ -5,7 +5,6 @@ import io.github.sunleader1997.reactorstream.abs.WorkSpaceEnv;
 import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 
@@ -19,22 +18,19 @@ public abstract class AbsDataSourceNode<T> extends AbsPipeline<T,T> {
     protected Destroyable producerDisposable;
     protected volatile boolean producerStarted = false;
     protected volatile boolean destroyed = false;
-    protected final Sinks.Many<T> dataSink;
 
     public AbsDataSourceNode() {
         this(new WorkSpaceEnv());
     }
 
-    @Override
-    protected Function<Mono<T>, Publisher<T>> pipelines() {
-        return null;
-    }
-
     public AbsDataSourceNode(WorkSpaceEnv workSpaceEnv) {
         this.workSpaceEnv = workSpaceEnv;
-        this.dataSink = Sinks.many().multicast().onBackpressureBuffer();
     }
 
+    @Override
+    protected Function<Mono<T>, Publisher<T>> pipelines() {
+        return tMono -> tMono;
+    }
     /**
      * 生产者定义
      * createConsumer 时自动执行
@@ -58,20 +54,7 @@ public abstract class AbsDataSourceNode<T> extends AbsPipeline<T,T> {
      * 返回发送结果，调用方自己决定重试/丢弃/记录
      */
     public Sinks.EmitResult tryEmit(T item) {
-        return dataSink.tryEmitNext(item);
-    }
-
-    @Override
-    public Flux<T> getFlux() {
-        return dataSink.asFlux().publishOn(workSpaceEnv.getConsumerScheduler());
-    }
-
-    protected <R> void doOnSuccess(R item) {
-        log.debug("doOnSuccess: {}", item);
-    }
-
-    protected <R> void onErrorContinue(Throwable throwable, R item) {
-        log.error("onErrorContinue: {}", item, throwable);
+        return this.receiver.tryEmitNext(item);
     }
 
     @Override

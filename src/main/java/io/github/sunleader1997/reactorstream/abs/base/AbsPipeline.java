@@ -1,9 +1,14 @@
 package io.github.sunleader1997.reactorstream.abs.base;
 
 import org.reactivestreams.Publisher;
+import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Sinks;
 
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Function;
 
 /**
@@ -12,19 +17,45 @@ import java.util.function.Function;
  */
 public abstract class AbsPipeline<T,R> implements AutoCloseable {
 
-    protected Flux<R> flux;
+    /**
+     * 收件箱
+     */
+    protected final Sinks.Many<T> receiver;
+    protected final List<AbsPipeline<R,?>> nextPipelines;
+    protected final Flux<R> flux;
+    protected final Disposable disposable;
 
-    public void dataFrom(AbsPipeline<?,T> absPipeline) {
-        if (this.flux != null) {
-            throw new IllegalStateException("Flux already initialized");
-        }
-        this.flux = absPipeline.getFlux()
+    public AbsPipeline() {
+        this.receiver = Sinks.many().multicast().onBackpressureBuffer();
+        this.nextPipelines = new ArrayList<>();
+        this.flux = receiver.asFlux()
                 // 不定义背压会缓存 N 条数据后阻塞线程
                 .flatMap(dataItem -> processors(dataItem))
-                // 使用 share() 使 flux 成为可共享的热发布者
-                // 避免多个下游订阅者重复触发上游处理逻辑
-                .share();
-        this.flux.subscribe();
+                .doOnNext(out->{
+                    nextPipelines.forEach(nextPipeline->nextPipeline.emitBusyLooping(out));
+                });
+        this.disposable = this.flux.subscribe();
+    }
+
+    public AbsPipeline<T,R> listen(AbsPipeline<?,T> absPipeline) {
+        absPipeline.outputTo(this);
+        return this;
+    }
+
+    /**
+     * 提交-阻塞
+     */
+    public void emitBusyLooping(T item) {
+        receiver.emitNext(item,Sinks.EmitFailureHandler.busyLooping(Duration.ofSeconds(1)));
+    }
+
+    /**
+     * @param absPipeline 下一个节点
+     * @return 下一个节点
+     */
+    public <P> AbsPipeline<R,P> outputTo(AbsPipeline<R,P> absPipeline) {
+        this.nextPipelines.add(absPipeline);
+        return absPipeline;
     }
 
     protected Publisher<R> processors(T dataItem) {
@@ -39,15 +70,4 @@ public abstract class AbsPipeline<T,R> implements AutoCloseable {
      */
     protected abstract Function<Mono<T>, Publisher<R>> pipelines();
 
-    /**
-     * 连接管道
-     * 将数据输出给管道
-     */
-    public void outputTo(AbsPipeline<R,?> absPipeline){
-        absPipeline.dataFrom(this);
-    }
-
-    public Flux<R> getFlux() {
-        return flux;
-    }
 }

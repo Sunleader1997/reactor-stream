@@ -20,12 +20,15 @@ public class ListenerTest {
 
     public static void main(String[] args) throws Exception {
         AbsDataSourceNode<String> listen = new AbsDataSourceNode<String>() {
+
             @Override
             public Destroyable startProducer(){
                 Thread thread = new Thread(() -> {
                     while (true) {
                         int data = counter.get();
-                        Sinks.EmitResult result = this.tryEmit("data|" + data);
+                        String item = "data|" + data;
+                        log.info("produce -> {}",item);
+                        Sinks.EmitResult result = this.tryEmit(item);
                         if (result.isSuccess()) {
                             counter.incrementAndGet();
                         }else{
@@ -54,7 +57,7 @@ public class ListenerTest {
                 return mino-> mino
 //                        .flatMapMany(item-> Flux.fromIterable(List.of("1>>>"+item,"2>>>"+item,"3>>>"+item)))
                         .flatMapMany(item-> Flux.fromIterable(List.of(">>>"+item)))
-                        .doOnNext(item -> log.info("Emitting "+item));
+                        .doOnNext(item -> log.info("mapPipeline => {}",item));
             }
 
             @Override
@@ -66,7 +69,7 @@ public class ListenerTest {
             @Override
             protected Function<Mono<String>, Publisher<String>> pipelines() {
                 return mino-> mino
-                        .doOnNext(item-> log.info(item));
+                        .doOnNext(item-> log.info("logPipeline1 => {}",item));
             }
 
             @Override
@@ -78,7 +81,7 @@ public class ListenerTest {
             @Override
             protected Function<Mono<String>, Publisher<String>> pipelines() {
                 return mino-> mino
-                        .doOnNext(item-> log.info(item));
+                        .doOnNext(item-> log.info("logPipeline2 => {}",item));
             }
 
             @Override
@@ -86,9 +89,8 @@ public class ListenerTest {
 
             }
         };
-        mapPipeline.dataFrom(listen);
-        logPipeline.dataFrom(mapPipeline);
-        logPipeline2.dataFrom(listen);
+        listen.outputTo(mapPipeline).outputTo(logPipeline);
+        listen.outputTo(logPipeline2);
         // 初始化客户端/服务端
         listen.startProducerOnce();
     }
