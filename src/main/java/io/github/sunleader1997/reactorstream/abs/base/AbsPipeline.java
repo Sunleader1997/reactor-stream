@@ -6,7 +6,6 @@ import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
-import reactor.util.annotation.NonNull;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -42,7 +41,7 @@ public abstract class AbsPipeline<T,R> implements AutoCloseable {
     /**
      * 设置订阅线程池
      */
-    public void trySetupPipeline(@NonNull WorkSpaceEnv workSpaceEnv) {
+    public void trySetupPipeline(WorkSpaceEnv workSpaceEnv) {
         if (initialized) return;
         synchronized (this) {
             if (!initialized) {  // double-check
@@ -51,6 +50,7 @@ public abstract class AbsPipeline<T,R> implements AutoCloseable {
                         // 不定义背压会缓存 N 条数据后阻塞线程
                         .flatMap(dataItem -> processors(dataItem).subscribeOn(workSpaceEnv.getConsumerScheduler()))
                         .doOnNext(out->{
+                            // 使用 BlockingEmitFailureHandler 让出空闲CPU，否则会因为 nextPipeline 的 receiver 被占满而阻塞
                             nextPipelines.forEach(nextPipeline->nextPipeline.emitBusyLooping(out));
                         });
                 this.disposable = this.flux.subscribe();
@@ -58,11 +58,16 @@ public abstract class AbsPipeline<T,R> implements AutoCloseable {
             }
         }
     }
+
+    public Sinks.EmitResult tryEmit(T item){
+        return receiver.tryEmitNext(item);
+    }
+
     /**
      * 提交-阻塞
      */
     public void emitBusyLooping(T item) {
-        receiver.emitNext(item, BlockingEmitFailureHandler.wait(Duration.ofSeconds(1)));
+        receiver.emitNext(item, BlockingEmitFailureHandler.wait(Duration.ofMillis(10)));
     }
 
     /**

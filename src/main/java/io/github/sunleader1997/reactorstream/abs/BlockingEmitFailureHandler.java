@@ -23,9 +23,6 @@ public class BlockingEmitFailureHandler implements Sinks.EmitFailureHandler {
 
       @Override
       public boolean onEmitFailure(SignalType signalType, Sinks.EmitResult emitResult) {
-          if (emitResult != Sinks.EmitResult.FAIL_NON_SERIALIZED) {
-              return false; // 非并发冲突，不重试
-          }
           // 让出 CPU，等待一小段时间再重试
           LockSupport.parkNanos(sleepNanos);
           return true;
