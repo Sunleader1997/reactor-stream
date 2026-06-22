@@ -71,7 +71,9 @@ public abstract class AbsPipeline<T, R> implements AutoCloseable {
 
     public Flux<R> processors(T dataItem) {
         Flux<R> rFlux = Mono.just(dataItem)
-                .as(pipelines());
+                .as(pipelines())
+                .doOnNext(output -> onProcessSuccess(dataItem, output))
+                .doOnError(error -> onProcessFailure(dataItem, error));
         if (workSpaceEnv.getConsumerSize() > 0) {
             return rFlux.publishOn(workSpaceEnv.getConsumerScheduler());
         }
@@ -84,6 +86,24 @@ public abstract class AbsPipeline<T, R> implements AutoCloseable {
      * Flux 返回多个数据
      */
     protected abstract Function<Mono<T>, Flux<R>> pipelines();
+
+    /**
+     * 单条数据处理成功回调
+     *
+     * @param input  输入数据
+     * @param output 输出数据
+     */
+    protected void onProcessSuccess(T input, R output) {
+    }
+
+    /**
+     * 单条数据处理失败回调
+     *
+     * @param input 输入数据
+     * @param error 异常信息
+     */
+    protected void onProcessFailure(T input, Throwable error) {
+    }
 
     @Override
     public void close() throws Exception {
