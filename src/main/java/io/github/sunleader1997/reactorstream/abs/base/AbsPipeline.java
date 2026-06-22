@@ -19,13 +19,13 @@ import java.util.function.Function;
  * 管道
  * 接入上游数据，暴露输出
  */
-public abstract class AbsPipeline<T,R> implements AutoCloseable {
+public abstract class AbsPipeline<T, R> implements AutoCloseable {
 
     /**
      * 收件箱
      */
     protected final Sinks.Many<T> receiver;
-    protected final List<AbsPipeline<R,?>> nextPipelines;
+    protected final List<AbsPipeline<R, ?>> nextPipelines;
     protected Flux<R> flux;
     protected Disposable disposable;
     protected WorkSpaceEnv workSpaceEnv;
@@ -36,7 +36,7 @@ public abstract class AbsPipeline<T,R> implements AutoCloseable {
         this.nextPipelines = new ArrayList<>();
     }
 
-    public AbsPipeline<T,R> listen(AbsPipeline<?,T> absPipeline) {
+    public AbsPipeline<T, R> listen(AbsPipeline<?, T> absPipeline) {
         absPipeline.outputTo(this);
         return this;
     }
@@ -52,9 +52,9 @@ public abstract class AbsPipeline<T,R> implements AutoCloseable {
                 this.flux = receiver.asFlux()
                         // 不定义背压会缓存 N 条数据后阻塞线程
                         .flatMap(dataItem -> processors(dataItem))
-                        .doOnNext(out->{
+                        .doOnNext(out -> {
                             // 使用 BlockingEmitFailureHandler 让出空闲CPU，否则会因为 nextPipeline 的 receiver 被占满而阻塞
-                            nextPipelines.forEach(nextPipeline->nextPipeline.emitBusyLooping(out));
+                            nextPipelines.forEach(nextPipeline -> nextPipeline.emitBusyLooping(out));
                         });
                 this.disposable = this.flux.subscribe();
                 this.initialized = true;
@@ -62,7 +62,7 @@ public abstract class AbsPipeline<T,R> implements AutoCloseable {
         }
     }
 
-    public Sinks.EmitResult tryEmit(T item){
+    public Sinks.EmitResult tryEmit(T item) {
         return receiver.tryEmitNext(item);
     }
 
@@ -77,15 +77,19 @@ public abstract class AbsPipeline<T,R> implements AutoCloseable {
      * @param absPipeline 下一个节点
      * @return 下一个节点
      */
-    public <P> AbsPipeline<R,P> outputTo(AbsPipeline<R,P> absPipeline) {
+    public <P> AbsPipeline<R, P> outputTo(AbsPipeline<R, P> absPipeline) {
         absPipeline.trySetupPipeline(workSpaceEnv);
         this.nextPipelines.add(absPipeline);
         return absPipeline;
     }
 
-    public Publisher<R> processors(T dataItem) {
-        return Mono.just(dataItem)
+    public Flux<R> processors(T dataItem) {
+        Flux<R> rFlux = Mono.just(dataItem)
                 .as(pipelines());
+        if (workSpaceEnv.getConsumerSize() > 0) {
+            return rFlux.publishOn(workSpaceEnv.getConsumerScheduler());
+        }
+        return rFlux;
     }
 
     /**
@@ -93,7 +97,7 @@ public abstract class AbsPipeline<T,R> implements AutoCloseable {
      * Mono 返回单个数据
      * Flux 返回多个数据
      */
-    protected abstract Function<Mono<T>, Publisher<R>> pipelines();
+    protected abstract Function<Mono<T>, Flux<R>> pipelines();
 
     @Override
     public void close() throws Exception {
