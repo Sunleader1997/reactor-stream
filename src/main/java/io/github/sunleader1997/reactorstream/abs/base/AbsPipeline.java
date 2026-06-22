@@ -2,9 +2,6 @@ package io.github.sunleader1997.reactorstream.abs.base;
 
 import io.github.sunleader1997.reactorstream.abs.BlockingEmitFailureHandler;
 import io.github.sunleader1997.reactorstream.abs.WorkSpaceEnv;
-import org.reactivestreams.Publisher;
-import org.reactivestreams.Subscriber;
-import org.reactivestreams.Subscription;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -29,37 +26,24 @@ public abstract class AbsPipeline<T, R> implements AutoCloseable {
     protected Flux<R> flux;
     protected Disposable disposable;
     protected WorkSpaceEnv workSpaceEnv;
-    protected volatile boolean initialized = false;
 
-    public AbsPipeline() {
+    public AbsPipeline(WorkSpaceEnv workSpaceEnv) {
         this.receiver = Sinks.many().multicast().onBackpressureBuffer();
         this.nextPipelines = new ArrayList<>();
+        this.workSpaceEnv = workSpaceEnv;
+        this.flux = receiver.asFlux()
+                // 不定义背压会缓存 N 条数据后阻塞线程
+                .flatMap(dataItem -> processors(dataItem))
+                .doOnNext(out -> {
+                    // 使用 BlockingEmitFailureHandler 让出空闲CPU，否则会因为 nextPipeline 的 receiver 被占满而阻塞
+                    nextPipelines.forEach(nextPipeline -> nextPipeline.emitBusyLooping(out));
+                });
+        this.disposable = this.flux.subscribe();
     }
 
     public AbsPipeline<T, R> listen(AbsPipeline<?, T> absPipeline) {
         absPipeline.outputTo(this);
         return this;
-    }
-
-    /**
-     * 设置订阅线程池
-     */
-    public void trySetupPipeline(WorkSpaceEnv workSpaceEnv) {
-        if (initialized) return;
-        synchronized (this) {
-            if (!initialized) {  // double-check
-                this.workSpaceEnv = workSpaceEnv;
-                this.flux = receiver.asFlux()
-                        // 不定义背压会缓存 N 条数据后阻塞线程
-                        .flatMap(dataItem -> processors(dataItem))
-                        .doOnNext(out -> {
-                            // 使用 BlockingEmitFailureHandler 让出空闲CPU，否则会因为 nextPipeline 的 receiver 被占满而阻塞
-                            nextPipelines.forEach(nextPipeline -> nextPipeline.emitBusyLooping(out));
-                        });
-                this.disposable = this.flux.subscribe();
-                this.initialized = true;
-            }
-        }
     }
 
     public Sinks.EmitResult tryEmit(T item) {
@@ -74,13 +58,15 @@ public abstract class AbsPipeline<T, R> implements AutoCloseable {
     }
 
     /**
-     * @param absPipeline 下一个节点
+     * @param absPipelines 下一个节点
      * @return 下一个节点
      */
-    public <P> AbsPipeline<R, P> outputTo(AbsPipeline<R, P> absPipeline) {
-        absPipeline.trySetupPipeline(workSpaceEnv);
-        this.nextPipelines.add(absPipeline);
-        return absPipeline;
+    @SafeVarargs
+    public final <P> AbsPipeline<T, R> outputTo(AbsPipeline<R, P>... absPipelines) {
+        for (AbsPipeline<R, P> absPipeline : absPipelines) {
+            this.nextPipelines.add(absPipeline);
+        }
+        return this;
     }
 
     public Flux<R> processors(T dataItem) {

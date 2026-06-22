@@ -11,7 +11,7 @@ import reactor.core.publisher.Sinks;
 import javax.security.auth.Destroyable;
 import java.util.function.Function;
 
-public abstract class AbsDataSourceNode<T> extends AbsPipeline<T,T> {
+public abstract class AbsDataSourceNode<T> extends AbsPipeline<T, T> {
 
     private static final Logger log = LoggerFactory.getLogger(AbsDataSourceNode.class);
     protected Destroyable producerDisposable;
@@ -23,13 +23,14 @@ public abstract class AbsDataSourceNode<T> extends AbsPipeline<T,T> {
     }
 
     public AbsDataSourceNode(WorkSpaceEnv workSpaceEnv) {
-        this.trySetupPipeline(workSpaceEnv);
+        super(workSpaceEnv);
     }
 
     @Override
     protected Function<Mono<T>, Flux<T>> pipelines() {
         return Mono::flux;
     }
+
     /**
      * 生产者定义
      * createConsumer 时自动执行
@@ -49,6 +50,7 @@ public abstract class AbsDataSourceNode<T> extends AbsPipeline<T,T> {
             producerStarted = true;
         }
     }
+
     /**
      * 返回发送结果，调用方自己决定重试/丢弃/记录
      */
