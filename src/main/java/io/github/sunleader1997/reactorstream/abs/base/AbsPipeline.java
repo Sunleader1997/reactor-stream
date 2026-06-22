@@ -27,6 +27,7 @@ public abstract class AbsPipeline<T,R> implements AutoCloseable {
     protected Flux<R> flux;
     protected Disposable disposable;
     protected WorkSpaceEnv workSpaceEnv;
+    protected volatile boolean initialized = false;
 
     public AbsPipeline() {
         this.receiver = Sinks.many().multicast().onBackpressureBuffer();
@@ -41,15 +42,21 @@ public abstract class AbsPipeline<T,R> implements AutoCloseable {
     /**
      * 设置订阅线程池
      */
-    public void subscribeOn(@NonNull WorkSpaceEnv workSpaceEnv) {
-        this.workSpaceEnv = workSpaceEnv;
-        this.flux = receiver.asFlux()
-                // 不定义背压会缓存 N 条数据后阻塞线程
-                .flatMap(dataItem -> processors(dataItem).subscribeOn(workSpaceEnv.getConsumerScheduler()))
-                .doOnNext(out->{
-                    nextPipelines.forEach(nextPipeline->nextPipeline.emitBusyLooping(out));
-                });
-        this.disposable = this.flux.subscribe();
+    public void trySetupPipeline(@NonNull WorkSpaceEnv workSpaceEnv) {
+        if (initialized) return;
+        synchronized (this) {
+            if (!initialized) {  // double-check
+                this.workSpaceEnv = workSpaceEnv;
+                this.flux = receiver.asFlux()
+                        // 不定义背压会缓存 N 条数据后阻塞线程
+                        .flatMap(dataItem -> processors(dataItem).subscribeOn(workSpaceEnv.getConsumerScheduler()))
+                        .doOnNext(out->{
+                            nextPipelines.forEach(nextPipeline->nextPipeline.emitBusyLooping(out));
+                        });
+                this.disposable = this.flux.subscribe();
+                this.initialized = true;
+            }
+        }
     }
     /**
      * 提交-阻塞
@@ -63,7 +70,7 @@ public abstract class AbsPipeline<T,R> implements AutoCloseable {
      * @return 下一个节点
      */
     public <P> AbsPipeline<R,P> outputTo(AbsPipeline<R,P> absPipeline) {
-        absPipeline.subscribeOn(workSpaceEnv);
+        absPipeline.trySetupPipeline(workSpaceEnv);
         this.nextPipelines.add(absPipeline);
         return absPipeline;
     }
