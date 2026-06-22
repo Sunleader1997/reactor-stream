@@ -49,43 +49,42 @@ public class ListenerTest {
                 };
             }
         };
-
-        AbsPipeline<String,String> mapPipeline = new AbsPipeline<String, String>() {
-            @Override
-            protected Function<Mono<String>, Flux<String>> pipelines() {
-                return mino-> mino
-//                        .flatMapMany(item-> Flux.fromIterable(List.of("1>>>"+item,"2>>>"+item,"3>>>"+item)))
-                        .flatMapMany(item-> Flux.fromIterable(List.of(">>>"+item)))
-                        .doOnNext(item -> {
-                            log.info("mapPipeline => {}",item);
-                        });
-            }
-        };
-        AbsPipeline<String,String> logPipeline = new AbsPipeline<String, String>() {
-            @Override
-            protected Function<Mono<String>, Flux<String>> pipelines() {
-                return mino-> mino
-                        .doOnNext(item-> {
-                            log.info("logPipeline1 => {}",item);
-                        })
-                        .flux();
-            }
-        };
+//
+//        AbsPipeline<String,String> mapPipeline = new AbsPipeline<String, String>() {
+//            @Override
+//            protected Function<Mono<String>, Flux<String>> pipelines() {
+//                return mino-> mino
+////                        .flatMapMany(item-> Flux.fromIterable(List.of("1>>>"+item,"2>>>"+item,"3>>>"+item)))
+//                        .flatMapMany(item-> Flux.fromIterable(List.of(">>>"+item)))
+//                        .doOnNext(item -> {
+//                            log.info("mapPipeline => {}",item);
+//                        });
+//            }
+//        };
+//        AbsPipeline<String,String> logPipeline = new AbsPipeline<String, String>() {
+//            @Override
+//            protected Function<Mono<String>, Flux<String>> pipelines() {
+//                return mino-> mino
+//                        .doOnNext(item-> {
+//                            log.info("logPipeline1 => {}",item);
+//                        })
+//                        .flux();
+//            }
+//        };
         AtomicLong count = new AtomicLong(0);
         long start = System.currentTimeMillis();
         AbsPipeline<String,String> logPipeline2 = new AbsPipeline<String, String>() {
             @Override
-            protected Function<Mono<String>, Flux<String>> pipelines() {
+            protected Function<Mono<String>, Publisher<String>> pipelines() {
                 return mino-> mino
                         .doOnNext(item-> {
                             long current = count.getAndIncrement();
+                            log.info("logPipeline2 => {}",current);
                             if(current>=MAX_NUMBER){
-                                log.info("logPipeline2 => {}",current);
                                 long end = System.currentTimeMillis();
                                 log.info("logPipeline2 tpc => {}/s",MAX_NUMBER/(end-start) * 1000);
                             }
-                        })
-                        .flux();
+                        });
             }
         };
         //listen.outputTo(mapPipeline).outputTo(logPipeline);

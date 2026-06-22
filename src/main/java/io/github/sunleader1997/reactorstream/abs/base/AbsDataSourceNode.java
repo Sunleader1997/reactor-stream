@@ -2,6 +2,7 @@ package io.github.sunleader1997.reactorstream.abs.base;
 
 
 import io.github.sunleader1997.reactorstream.abs.WorkSpaceEnv;
+import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -27,8 +28,8 @@ public abstract class AbsDataSourceNode<T> extends AbsPipeline<T,T> {
     }
 
     @Override
-    protected Function<Mono<T>, Flux<T>> pipelines() {
-        return Mono::flux;
+    protected Function<Mono<T>, Publisher<T>> pipelines() {
+        return tMono -> tMono;
     }
     /**
      * 生产者定义

@@ -2,6 +2,9 @@ package io.github.sunleader1997.reactorstream.abs.base;
 
 import io.github.sunleader1997.reactorstream.abs.BlockingEmitFailureHandler;
 import io.github.sunleader1997.reactorstream.abs.WorkSpaceEnv;
+import org.reactivestreams.Publisher;
+import org.reactivestreams.Subscriber;
+import org.reactivestreams.Subscription;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -48,7 +51,7 @@ public abstract class AbsPipeline<T,R> implements AutoCloseable {
                 this.workSpaceEnv = workSpaceEnv;
                 this.flux = receiver.asFlux()
                         // 不定义背压会缓存 N 条数据后阻塞线程
-                        .flatMap(dataItem -> processors(dataItem).subscribeOn(workSpaceEnv.getConsumerScheduler()))
+                        .flatMap(dataItem -> processors(dataItem))
                         .doOnNext(out->{
                             // 使用 BlockingEmitFailureHandler 让出空闲CPU，否则会因为 nextPipeline 的 receiver 被占满而阻塞
                             nextPipelines.forEach(nextPipeline->nextPipeline.emitBusyLooping(out));
@@ -80,7 +83,7 @@ public abstract class AbsPipeline<T,R> implements AutoCloseable {
         return absPipeline;
     }
 
-    protected Flux<R> processors(T dataItem) {
+    public Publisher<R> processors(T dataItem) {
         return Mono.just(dataItem)
                 .as(pipelines());
     }
@@ -90,7 +93,7 @@ public abstract class AbsPipeline<T,R> implements AutoCloseable {
      * Mono 返回单个数据
      * Flux 返回多个数据
      */
-    protected abstract Function<Mono<T>, Flux<R>> pipelines();
+    protected abstract Function<Mono<T>, Publisher<R>> pipelines();
 
     @Override
     public void close() throws Exception {
