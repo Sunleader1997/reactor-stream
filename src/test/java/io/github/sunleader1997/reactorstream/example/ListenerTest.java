@@ -33,7 +33,7 @@ public class ListenerTest {
                     while (counter.get()<=MAX_NUMBER) {
                         int data = counter.get();
                         String item = "data|" + data;
-                        //log.info("produce -> {}",item);
+//                        log.info("produce -> {}",item);
                         this.emitBusyLooping(item);
                         counter.incrementAndGet();
                     }
@@ -57,7 +57,7 @@ public class ListenerTest {
 //                        .flatMapMany(item-> Flux.fromIterable(List.of("1>>>"+item,"2>>>"+item,"3>>>"+item)))
                         .flatMapMany(item-> Flux.fromIterable(List.of(">>>"+item)))
                         .doOnNext(item -> {
-//                            log.info("mapPipeline => {}",item);
+                            log.info("mapPipeline => {}",item);
                         });
             }
         };
@@ -66,26 +66,24 @@ public class ListenerTest {
             protected Function<Mono<String>, Flux<String>> pipelines() {
                 return mino-> mino
                         .doOnNext(item-> {
-                            //log.info("logPipeline1 => {}",item);
+                            log.info("logPipeline1 => {}",item);
                         })
                         .flux();
             }
         };
         AtomicLong count = new AtomicLong(0);
-        AtomicLong tpsCounter = new AtomicLong(0);
-        ScheduledExecutorService tpsPrinter = Executors.newSingleThreadScheduledExecutor();
-        tpsPrinter.scheduleAtFixedRate(() -> {
-            long tps = tpsCounter.getAndSet(0);
-            log.info("logPipeline2 TPS => {}/s, total => {}", tps, count.get());
-        }, 1, 1, TimeUnit.SECONDS);
-
+        long start = System.currentTimeMillis();
         AbsPipeline<String,String> logPipeline2 = new AbsPipeline<String, String>() {
             @Override
             protected Function<Mono<String>, Flux<String>> pipelines() {
                 return mino-> mino
                         .doOnNext(item-> {
-                            count.incrementAndGet();
-                            tpsCounter.incrementAndGet();
+                            long current = count.getAndIncrement();
+                            if(current>=MAX_NUMBER){
+                                log.info("logPipeline2 => {}",current);
+                                long end = System.currentTimeMillis();
+                                log.info("logPipeline2 tpc => {}/s",MAX_NUMBER/(end-start) * 1000);
+                            }
                         })
                         .flux();
             }
