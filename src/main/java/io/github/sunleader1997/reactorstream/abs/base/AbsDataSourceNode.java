@@ -23,7 +23,7 @@ public abstract class AbsDataSourceNode<T> extends AbsPipeline<T,T> {
     }
 
     public AbsDataSourceNode(WorkSpaceEnv workSpaceEnv) {
-        this.setWorkSpaceEnv(workSpaceEnv);
+        this.subscribeOn(workSpaceEnv);
     }
 
     @Override

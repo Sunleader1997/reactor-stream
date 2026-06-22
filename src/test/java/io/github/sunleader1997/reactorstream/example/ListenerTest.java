@@ -59,11 +59,6 @@ public class ListenerTest {
                         .flatMapMany(item-> Flux.fromIterable(List.of(">>>"+item)))
                         .doOnNext(item -> log.info("mapPipeline => {}",item));
             }
-
-            @Override
-            public void close() {
-
-            }
         };
         AbsPipeline<String,String> logPipeline = new AbsPipeline<String, String>() {
             @Override
@@ -72,11 +67,6 @@ public class ListenerTest {
                         .doOnNext(item-> log.info("logPipeline1 => {}",item))
                         .flux();
             }
-
-            @Override
-            public void close() throws Exception {
-
-            }
         };
         AbsPipeline<String,String> logPipeline2 = new AbsPipeline<String, String>() {
             @Override
@@ -84,11 +74,6 @@ public class ListenerTest {
                 return mino-> mino
                         .doOnNext(item-> log.info("logPipeline2 => {}",item))
                         .flux();
-            }
-
-            @Override
-            public void close() throws Exception {
-
             }
         };
         listen.outputTo(mapPipeline).outputTo(logPipeline);

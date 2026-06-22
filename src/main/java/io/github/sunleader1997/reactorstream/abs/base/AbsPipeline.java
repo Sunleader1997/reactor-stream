@@ -2,12 +2,10 @@ package io.github.sunleader1997.reactorstream.abs.base;
 
 import io.github.sunleader1997.reactorstream.abs.BlockingEmitFailureHandler;
 import io.github.sunleader1997.reactorstream.abs.WorkSpaceEnv;
-import org.reactivestreams.Publisher;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
-import reactor.core.scheduler.Scheduler;
 import reactor.util.annotation.NonNull;
 
 import java.time.Duration;
@@ -43,7 +41,7 @@ public abstract class AbsPipeline<T,R> implements AutoCloseable {
     /**
      * 设置订阅线程池
      */
-    public void setWorkSpaceEnv(@NonNull WorkSpaceEnv workSpaceEnv) {
+    public void subscribeOn(@NonNull WorkSpaceEnv workSpaceEnv) {
         this.workSpaceEnv = workSpaceEnv;
         this.flux = receiver.asFlux()
                 // 不定义背压会缓存 N 条数据后阻塞线程
@@ -65,7 +63,7 @@ public abstract class AbsPipeline<T,R> implements AutoCloseable {
      * @return 下一个节点
      */
     public <P> AbsPipeline<R,P> outputTo(AbsPipeline<R,P> absPipeline) {
-        absPipeline.setWorkSpaceEnv(workSpaceEnv);
+        absPipeline.subscribeOn(workSpaceEnv);
         this.nextPipelines.add(absPipeline);
         return absPipeline;
     }
