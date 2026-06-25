@@ -43,15 +43,20 @@ public abstract class AbsPipeline<T, R> implements AutoCloseable {
         this.flux = receiver.asFlux()
                 // 不定义背压会缓存 N 条数据后阻塞线程
                 .flatMap(dataItem -> processors(dataItem))
-                .doOnNext(out -> {
-                    // 使用 BlockingEmitFailureHandler 让出空闲CPU，否则会因为 nextPipeline 的 receiver 被占满而阻塞
-                    nextPipelineIds.forEach(nextPipelineId -> {
-                        Optional<AbsPipeline<R, ?>> nextPipelineOptional = PipelineManager.get(nextPipelineId);
-                        nextPipelineOptional.ifPresent(nextPipeline -> nextPipeline.emitBusyLooping(out));
-                    });
-                });
+                .doOnNext(this::emitToNextPipeline);
         this.disposable = this.flux.subscribe();
         PipelineManager.save(this);
+    }
+
+    /**
+     * 提交给下一批节点
+     */
+    private void emitToNextPipeline(R out) {
+        // 使用 BlockingEmitFailureHandler 让出空闲CPU，否则会因为 nextPipeline 的 receiver 被占满而阻塞
+        nextPipelineIds.forEach(nextPipelineId -> {
+            Optional<AbsPipeline<R, ?>> nextPipelineOptional = PipelineManager.get(nextPipelineId);
+            nextPipelineOptional.ifPresent(nextPipeline -> nextPipeline.emitBusyLooping(out));
+        });
     }
 
     public AbsPipeline<T, R> listen(AbsPipeline<?, T> absPipeline) {
