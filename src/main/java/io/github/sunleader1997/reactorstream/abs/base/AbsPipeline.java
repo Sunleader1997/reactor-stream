@@ -1,6 +1,7 @@
 package io.github.sunleader1997.reactorstream.abs.base;
 
 import io.github.sunleader1997.reactorstream.abs.BlockingEmitFailureHandler;
+import io.github.sunleader1997.reactorstream.abs.PipelineManager;
 import io.github.sunleader1997.reactorstream.abs.WorkSpaceEnv;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
@@ -8,8 +9,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 import java.util.function.Function;
 
 /**
@@ -19,26 +19,39 @@ import java.util.function.Function;
 public abstract class AbsPipeline<T, R> implements AutoCloseable {
 
     /**
+     * 管道id
+     */
+    private final String id;
+    /**
      * 收件箱
      */
     protected final Sinks.Many<T> receiver;
-    protected final List<AbsPipeline<R, ?>> nextPipelines;
+    protected final List<String> nextPipelineIds;
     protected Flux<R> flux;
     protected Disposable disposable;
     protected WorkSpaceEnv workSpaceEnv;
 
     public AbsPipeline(WorkSpaceEnv workSpaceEnv) {
+        this(UUID.randomUUID().toString(), workSpaceEnv);
+    }
+
+    public AbsPipeline(String id, WorkSpaceEnv workSpaceEnv) {
+        this.id = id;
         this.receiver = Sinks.many().multicast().onBackpressureBuffer();
-        this.nextPipelines = new ArrayList<>();
+        this.nextPipelineIds = new ArrayList<>();
         this.workSpaceEnv = workSpaceEnv;
         this.flux = receiver.asFlux()
                 // 不定义背压会缓存 N 条数据后阻塞线程
                 .flatMap(dataItem -> processors(dataItem))
                 .doOnNext(out -> {
                     // 使用 BlockingEmitFailureHandler 让出空闲CPU，否则会因为 nextPipeline 的 receiver 被占满而阻塞
-                    nextPipelines.forEach(nextPipeline -> nextPipeline.emitBusyLooping(out));
+                    nextPipelineIds.forEach(nextPipelineId -> {
+                        Optional<AbsPipeline<R, ?>> nextPipelineOptional = PipelineManager.get(nextPipelineId);
+                        nextPipelineOptional.ifPresent(nextPipeline -> nextPipeline.emitBusyLooping(out));
+                    });
                 });
         this.disposable = this.flux.subscribe();
+        PipelineManager.save(this);
     }
 
     public AbsPipeline<T, R> listen(AbsPipeline<?, T> absPipeline) {
@@ -64,8 +77,17 @@ public abstract class AbsPipeline<T, R> implements AutoCloseable {
     @SafeVarargs
     public final <P> AbsPipeline<T, R> outputTo(AbsPipeline<R, P>... absPipelines) {
         for (AbsPipeline<R, P> absPipeline : absPipelines) {
-            this.nextPipelines.add(absPipeline);
+            this.nextPipelineIds.add(absPipeline.getId());
         }
+        return this;
+    }
+
+    /**
+     * @param absPipelineIds 下一个节点Id
+     * @return 下一个节点
+     */
+    public final AbsPipeline<T, R> outputTo(String... absPipelineIds) {
+        this.nextPipelineIds.addAll(Arrays.asList(absPipelineIds));
         return this;
     }
 
@@ -105,8 +127,13 @@ public abstract class AbsPipeline<T, R> implements AutoCloseable {
     protected void onProcessFailure(T input, Throwable error) {
     }
 
+    public String getId() {
+        return id;
+    }
+
     @Override
     public void close() throws Exception {
+        PipelineManager.remove(id);
         if (disposable != null) {
             this.disposable.dispose();
         }
